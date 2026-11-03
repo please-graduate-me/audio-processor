@@ -1,0 +1,4 @@
+httpx==0.28.1
+yt-dlp[default]==2026.10.26
+numpy==2.5.4
+onnxruntime==1.31.1

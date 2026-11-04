@@ -2,7 +2,6 @@ services:
   processor:
     build: .
     init: true
-    stdin_open: true
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       QRUQ_WHISPER: ${QRUQ_WHISPER:-}
@@ -10,3 +9,20 @@ services:
       YOUTUBE_DATA_API_v3: ${YOUTUBE_DATA_API_v3:-}
       YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-}
       YTDLP_EXTRACTOR_ARGS: ${YTDLP_EXTRACTOR_ARGS:-}
+      PROCESSOR_API_TOKEN: ${PROCESSOR_API_TOKEN:?PROCESSOR_API_TOKEN을 설정하세요}
+      PROCESSOR_CONCURRENCY: ${PROCESSOR_CONCURRENCY:-1}
+    ports:
+      - '127.0.0.1:8000:8000'
+    networks:
+      processing:
+        aliases:
+          - audio-processor
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+networks:
+  processing:
+    name: graduate-me-processing

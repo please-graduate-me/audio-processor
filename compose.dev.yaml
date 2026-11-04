@@ -1,0 +1,13 @@
+services:
+  processor:
+    develop:
+      watch:
+        - action: sync+restart
+          path: .
+          target: /app
+          initial_sync: true
+          ignore: [.git/, .env, '.env.*', __pycache__/, .venv/, models/, requirements.txt, 'cookies*']
+        - action: rebuild
+          path: requirements.txt
+        - action: rebuild
+          path: Dockerfile

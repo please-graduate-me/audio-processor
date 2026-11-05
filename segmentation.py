@@ -3,6 +3,14 @@ import re
 from speech_filter import accept_word, low_confidence_regions, unsupported_transcript_regions
 
 
+def restore_timeline(payload, offset):
+    """잘라낸 초반 무음만큼 단어와 신뢰도 구간을 원본 영상 시간으로 복원한다."""
+    return {**payload, **{
+        key: [{**item, "start": float(item["start"]) + offset, "end": float(item["end"]) + offset} for item in payload.get(key, [])]
+        for key in ("words", "segments")
+    }}
+
+
 def split_transcript(payload, duration, speech_regions=None):
     """단어의 원본 시간을 보존하면서 문장, 휴지, 최대 길이로 나눈다."""
     raw = payload.get("words") or []

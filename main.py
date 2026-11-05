@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import sys
 import httpx
-from segmentation import split_transcript
+from segmentation import restore_timeline, split_transcript
 from speech_filter import FILTER_VERSION, detect_speech
 from errors import ProcessingError
 from video_validation import validate_metadata, youtube_metadata
@@ -62,6 +62,17 @@ def prepare_audio(video_id, root, on_download=None):
     return info, duration, output, wav
 
 
+def prepare_transcription_audio(output, wav, speech_regions):
+    """초반 무음에 첫 단어 시간이 늘어지지 않도록 인식 입력에만 앞부분을 덜어낸다."""
+    # VAD 여백에 0.5초를 더 남겨 약하게 시작하는 첫 음절을 보호한다.
+    offset = max(0, speech_regions[0]["start"] - 0.5)
+    if offset == 0:
+        return output, offset
+    trimmed = output.with_name("speech.mp3")
+    run(["ffmpeg", "-nostdin", "-y", "-ss", str(offset), "-i", str(wav), "-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "48k", str(trimmed)], 120)
+    return trimmed, offset
+
+
 def process(youtube_id, emit):
     api_key = os.environ.get("GROQ_API_KEY") or os.environ.get("QRUQ_WHISPER")
     if not api_key:
@@ -76,7 +87,8 @@ def process(youtube_id, emit):
             raise ProcessingError("NO_SPEECH", "학습할 말소리를 찾지 못했습니다. 음악이나 무음 위주의 영상인지 확인해 주세요.")
         emit({"type": "transcribing", "title": str(info.get("title") or "유튜브 영상"), "duration": duration,
               "category": info.get("category"), "youtubeCategoryId": info.get("youtubeCategoryId")})
-        with output.open("rb") as file:
+        transcription_audio, offset = prepare_transcription_audio(output, wav, speech_regions)
+        with transcription_audio.open("rb") as file:
             try:
                 response = httpx.post("https://api.groq.com/openai/v1/audio/transcriptions", headers={"Authorization": "Bearer " + api_key},
                     files={"file": ("audio.mp3", file, "audio/mpeg")},
@@ -90,7 +102,7 @@ def process(youtube_id, emit):
         if response.is_error:
             raise ProcessingError("STT_FAILED", "음성 인식 요청을 처리하지 못했습니다.")
         try:
-            segments = split_transcript(response.json(), duration, speech_regions)
+            segments = split_transcript(restore_timeline(response.json(), offset), duration, speech_regions)
         except (ValueError, KeyError, TypeError):
             raise ProcessingError("INVALID_TRANSCRIPT", "학습 가능한 음성 또는 정확한 시간 정보를 얻지 못했습니다. 다른 영상을 선택해 주세요.")
         return {"type": "complete", "segments": segments, "speechRegions": speech_regions, "filterVersion": FILTER_VERSION}
